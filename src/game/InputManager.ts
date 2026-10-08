@@ -1,5 +1,5 @@
 export type InputSignal =
-  | { type: "action"; action: "flap" | "togglePause" }
+  | { type: "action"; action: "flap" | "togglePause" | "toggleStats" | "toggleMute" }
   | { type: "pointerDown"; x: number; y: number }
   | { type: "pointerUp"; x: number; y: number }
   | { type: "pointerCancel" };
@@ -28,12 +28,18 @@ export class InputManager {
     const code = event.code;
     const flapKey = code === "Space" || code === "ArrowUp" || code === "KeyW" || code === "Enter";
     const pauseKey = code === "Escape" || code === "KeyP";
+    const statsKey = code === "KeyS";
+    const muteKey = code === "KeyM";
 
-    if (flapKey || pauseKey) event.preventDefault();
+    if (flapKey || pauseKey || statsKey || muteKey) event.preventDefault();
     if (event.repeat) return;
 
     if (pauseKey) {
       this.dispatch({ type: "action", action: "togglePause" });
+    } else if (statsKey) {
+      this.dispatch({ type: "action", action: "toggleStats" });
+    } else if (muteKey) {
+      this.dispatch({ type: "action", action: "toggleMute" });
     } else if (flapKey) {
       this.dispatch({ type: "action", action: "flap" });
     }

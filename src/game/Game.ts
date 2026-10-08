@@ -1,28 +1,13 @@
 import { loadAssets } from "./assets";
 import type { AssetPack } from "./assets";
 import { AIRSHIPS, BIRD, EFFECTS, PHYSICS, PIPE, UI, VIEWPORT } from "./constants";
+import { AudioManager } from "./AudioManager";
 import { InputManager } from "./InputManager";
 import type { InputSignal } from "./InputManager";
 import { Renderer } from "./Renderer";
-import { readBestScore, saveBestScore } from "./storage";
+import { awardPipeScore, difficultyForScore, gapCenterFrom, rankForScore } from "./rules";
+import { loadProfile, saveProfile } from "./storage";
 import type { Airship, Bird, GameState, PipePair, PressedButton, VisualEffect } from "./types";
-
-export function gapCenterFrom(randomValue: number, previousCenter?: number): number {
-  const minimum = PIPE.gap / 2 + PIPE.safeCenterMargin;
-  const maximum = VIEWPORT.height - minimum;
-  const origin = previousCenter ?? VIEWPORT.height / 2;
-  const shift = previousCenter === undefined ? PIPE.initialGapShift : PIPE.maxGapShift;
-  const localMinimum = Math.max(minimum, origin - shift);
-  const localMaximum = Math.min(maximum, origin + shift);
-  const random = Math.max(0, Math.min(1, randomValue));
-  return localMinimum + random * (localMaximum - localMinimum);
-}
-
-export function awardPipeScore(pair: PipePair): boolean {
-  if (pair.passed) return false;
-  pair.passed = true;
-  return true;
-}
 
 export class Game {
   private readonly context: CanvasRenderingContext2D;
@@ -51,7 +36,15 @@ export class Game {
     active: false,
   }));
   private score = 0;
-  private bestScore = readBestScore();
+  private profile = loadProfile();
+  private runElapsedSeconds = 0;
+  private runPipesPassed = 0;
+  private newBest = false;
+  private milestoneRemaining = 0;
+  private announcedTier = 0;
+  private countdownRemaining = 0;
+  private statsOpen = false;
+  private readonly audio = new AudioManager();
   private pressedButton: PressedButton = null;
   private steamTimer = 3.2;
   private airshipTimer: number = AIRSHIPS.firstDelay;
@@ -93,6 +86,7 @@ export class Game {
   destroy(): void {
     cancelAnimationFrame(this.animationFrame);
     this.input.destroy();
+    this.audio.destroy();
     this.resizeObserver.disconnect();
     window.removeEventListener("resize", this.resize);
   }
@@ -134,7 +128,14 @@ export class Game {
       airships: this.airships,
       effects: this.effects,
       score: this.score,
-      bestScore: this.bestScore,
+      bestScore: this.profile.bestScore,
+      profile: this.profile,
+      rank: rankForScore(this.score),
+      newBest: this.newBest,
+      muted: this.profile.muted,
+      statsOpen: this.statsOpen,
+      countdownLabel: this.countdownLabel(),
+      milestoneMessage: this.milestoneRemaining > 0 ? "SPEED UP" : null,
       pressedButton: this.pressedButton,
     });
     this.animationFrame = requestAnimationFrame(this.tick);
@@ -142,6 +143,12 @@ export class Game {
 
   private update(delta: number): void {
     if (this.state === "LOADING" || this.state === "PAUSED") return;
+
+    if (this.state === "RESUME_COUNTDOWN") {
+      this.countdownRemaining = Math.max(0, this.countdownRemaining - delta);
+      if (this.countdownRemaining === 0) this.setState("PLAYING");
+      return;
+    }
 
     if (this.state === "READY") {
       this.sceneTime += delta;
@@ -156,6 +163,8 @@ export class Game {
     }
 
     this.sceneTime += delta;
+    this.milestoneRemaining = Math.max(0, this.milestoneRemaining - delta);
+    this.runElapsedSeconds += delta;
     this.updateBird(delta);
     this.updatePipes(delta);
     this.updateAirships(delta);
@@ -168,9 +177,22 @@ export class Game {
     for (const pipe of this.pipes) {
       if (pipe.x < BIRD.x && awardPipeScore(pipe)) {
         this.score += 1;
-        if (this.score > this.bestScore) {
-          this.bestScore = this.score;
-          saveBestScore(this.bestScore);
+        this.runPipesPassed += 1;
+        this.audio.play("score", this.profile.muted);
+        vibrate(12);
+
+        if (this.score > this.profile.bestScore) {
+          this.profile.bestScore = this.score;
+          this.newBest = true;
+          saveProfile(this.profile);
+          this.audio.play("newBest", this.profile.muted);
+        }
+
+        const tier = difficultyForScore(this.score);
+        if (tier.index > this.announcedTier) {
+          this.announcedTier = tier.index;
+          this.milestoneRemaining = 1.2;
+          this.audio.play("milestone", this.profile.muted);
         }
       }
     }
@@ -196,7 +218,8 @@ export class Game {
   }
 
   private updatePipes(delta: number): void {
-    for (const pipe of this.pipes) pipe.x -= PIPE.speed * delta;
+    const speed = difficultyForScore(this.score).speed;
+    for (const pipe of this.pipes) pipe.x -= speed * delta;
 
     while (this.pipes.length > 0 && this.pipes[0].x < -PIPE.capWidth / 2) {
       this.pipes.shift();
@@ -212,9 +235,11 @@ export class Game {
     ) {
       const previous = this.pipes[this.pipes.length - 1];
       const x = previous ? previous.x + PIPE.spacing : VIEWPORT.width + PIPE.capWidth / 2;
+      const gap = difficultyForScore(this.score).gap;
       this.pipes.push({
         x,
-        gapCenter: gapCenterFrom(Math.random(), previous?.gapCenter),
+        gapCenter: gapCenterFrom(Math.random(), gap, previous?.gapCenter, previous?.gap),
+        gap,
         passed: false,
       });
     }
@@ -254,7 +279,7 @@ export class Game {
       this.spawnEffect(
         "steam",
         pipe.x + PIPE.capWidth * 0.43,
-        pipe.gapCenter - PIPE.gap / 2 - PIPE.capHeight * 0.38,
+        pipe.gapCenter - pipe.gap / 2 - PIPE.capHeight * 0.38,
         EFFECTS.steamDuration,
       );
       this.steamTimer = this.randomBetween(EFFECTS.steamMinInterval, EFFECTS.steamMaxInterval);
@@ -279,10 +304,10 @@ export class Game {
       return true;
     }
 
-    const halfGap = PIPE.gap / 2;
     for (const pipe of this.pipes) {
       const left = pipe.x - PIPE.collisionWidth / 2;
       const right = pipe.x + PIPE.collisionWidth / 2;
+      const halfGap = pipe.gap / 2;
       const gapTop = pipe.gapCenter - halfGap;
       const gapBottom = pipe.gapCenter + halfGap;
 
@@ -315,6 +340,18 @@ export class Game {
   }
 
   private endRun(): void {
+    this.profile.totalRuns = Math.min(Number.MAX_SAFE_INTEGER, this.profile.totalRuns + 1);
+    this.profile.totalPipesPassed = Math.min(
+      Number.MAX_SAFE_INTEGER,
+      this.profile.totalPipesPassed + this.runPipesPassed,
+    );
+    this.profile.totalPlayTimeSeconds = Math.min(
+      Number.MAX_SAFE_INTEGER,
+      this.profile.totalPlayTimeSeconds + Math.round(this.runElapsedSeconds),
+    );
+    saveProfile(this.profile);
+    this.audio.play("collision", this.profile.muted);
+    vibrate(35);
     this.setState("GAME_OVER");
     this.spawnEffect("spark", BIRD.x + 14, this.bird.y, EFFECTS.sparkDuration);
   }
@@ -348,24 +385,39 @@ export class Game {
         this.togglePause();
       } else if (releasedOnButton && pressed === "restart" && this.state === "GAME_OVER") {
         this.resetRound();
+      } else if (releasedOnButton && pressed === "mute") {
+        this.toggleMute();
+      } else if (releasedOnButton && pressed === "stats" && this.state === "READY") {
+        this.statsOpen = true;
+      } else if (releasedOnButton && pressed === "closeStats" && this.statsOpen) {
+        this.statsOpen = false;
       }
       return;
     }
     if (this.state === "LOADING") return;
 
     if (signal.type === "action") {
+      this.audio.activate(this.profile.muted);
       if (signal.action === "togglePause") {
-        this.togglePause();
-      } else {
+        if (this.statsOpen) this.statsOpen = false;
+        else this.togglePause();
+      } else if (signal.action === "toggleStats") {
+        if (this.state === "READY") this.statsOpen = !this.statsOpen;
+      } else if (signal.action === "toggleMute") {
+        this.toggleMute();
+      } else if (!this.statsOpen) {
         this.flapOrRestart();
       }
       return;
     }
 
+    this.audio.activate(this.profile.muted);
     this.pressedButton = this.buttonAt(signal.x, signal.y);
     if (this.state === "READY") {
-      this.beginRun();
-      this.flap();
+      if (!this.statsOpen && this.pressedButton === null) {
+        this.beginRun();
+        this.flap();
+      }
     } else if (this.state === "PLAYING") {
       if (this.pressedButton === null) this.flap();
     } else if (this.state === "GAME_OVER") {
@@ -374,6 +426,15 @@ export class Game {
   }
 
   private buttonAt(x: number, y: number): PressedButton {
+    const muteY = this.state === "READY"
+      ? this.statsOpen ? UI.mute.statsY : UI.mute.readyY
+      : UI.mute.y;
+    if (insideSquare(x, y, UI.mute.x, muteY, UI.mute.targetSize)) return "mute";
+    if (this.state === "READY" && !this.statsOpen &&
+        insideSquare(x, y, UI.stats.x, UI.stats.y, UI.stats.targetSize)) return "stats";
+    if (this.state === "READY" && this.statsOpen &&
+        insideSquare(x, y, UI.closeStats.x, UI.closeStats.y, UI.closeStats.targetSize)) return "closeStats";
+
     const control =
       this.state === "PLAYING"
         ? UI.pause
@@ -383,8 +444,7 @@ export class Game {
             ? UI.restart
             : null;
     if (!control) return null;
-    const halfSize = control.targetSize / 2;
-    return Math.abs(x - control.x) <= halfSize && Math.abs(y - control.y) <= halfSize
+    return insideSquare(x, y, control.x, control.y, control.targetSize)
       ? this.state === "PLAYING"
         ? "pause"
         : this.state === "PAUSED"
@@ -394,7 +454,7 @@ export class Game {
   }
 
   private flapOrRestart(): void {
-    if (this.state === "READY") {
+    if (this.state === "READY" && !this.statsOpen) {
       this.beginRun();
       this.flap();
     } else if (this.state === "PLAYING") {
@@ -405,6 +465,11 @@ export class Game {
   }
 
   private beginRun(): void {
+    this.runElapsedSeconds = 0;
+    this.runPipesPassed = 0;
+    this.newBest = false;
+    this.milestoneRemaining = 0;
+    this.announcedTier = 0;
     this.ensurePipes();
     this.setState("PLAYING");
   }
@@ -413,11 +478,21 @@ export class Game {
     if (this.state !== "PLAYING") return;
     this.bird.velocityY = PHYSICS.flapVelocity;
     this.bird.animationTime = 0;
+    this.audio.play("flap", this.profile.muted);
   }
 
   private togglePause(): void {
     if (this.state === "PLAYING") this.setState("PAUSED");
-    else if (this.state === "PAUSED") this.setState("PLAYING");
+    else if (this.state === "PAUSED") {
+      this.countdownRemaining = 3.5;
+      this.setState("RESUME_COUNTDOWN");
+    }
+  }
+
+  private toggleMute(): void {
+    this.profile.muted = !this.profile.muted;
+    saveProfile(this.profile);
+    this.audio.activate(this.profile.muted);
   }
 
   private resetRound(): void {
@@ -428,6 +503,13 @@ export class Game {
     this.bird.rotation = 0;
     this.bird.animationTime = 0;
     this.steamTimer = 3.2;
+    this.runElapsedSeconds = 0;
+    this.runPipesPassed = 0;
+    this.newBest = false;
+    this.milestoneRemaining = 0;
+    this.announcedTier = 0;
+    this.countdownRemaining = 0;
+    this.statsOpen = false;
     for (const effect of this.effects) effect.active = false;
     this.setState("READY");
   }
@@ -440,6 +522,7 @@ export class Game {
       READY: "Ready. Tap, click, Space, Arrow Up, or W to fly.",
       PLAYING: "Flying. Press P or Escape to pause.",
       PAUSED: "Paused. Press P, Escape, or the play button to resume.",
+      RESUME_COUNTDOWN: "Resuming in 3, 2, 1, go.",
       GAME_OVER: "Game over. Tap, click, or press Space to return to ready.",
     };
     this.setStatus(messages[state]);
@@ -454,15 +537,24 @@ export class Game {
     return minimum + Math.random() * (maximum - minimum);
   }
 
+  private countdownLabel(): string | null {
+    if (this.state !== "RESUME_COUNTDOWN") return null;
+    if (this.countdownRemaining > 2.5) return "3";
+    if (this.countdownRemaining > 1.5) return "2";
+    if (this.countdownRemaining > 0.5) return "1";
+    return "GO";
+  }
+
   private runDevelopmentChecks(): void {
     if (!import.meta.env.DEV) return;
 
-    const minimum = PIPE.gap / 2 + PIPE.safeCenterMargin;
+    const gap = difficultyForScore(0).gap;
+    const minimum = gap / 2 + PIPE.safeCenterMargin;
     const maximum = VIEWPORT.height - minimum;
-    const firstLower = gapCenterFrom(0);
-    const firstUpper = gapCenterFrom(1);
-    const adjacentLower = gapCenterFrom(0, minimum);
-    const adjacentUpper = gapCenterFrom(1, minimum);
+    const firstLower = gapCenterFrom(0, gap);
+    const firstUpper = gapCenterFrom(1, gap);
+    const adjacentLower = gapCenterFrom(0, gap, minimum, gap);
+    const adjacentUpper = gapCenterFrom(1, gap, minimum, gap);
     console.assert(
       firstLower >= minimum &&
         firstUpper <= maximum &&
@@ -471,9 +563,24 @@ export class Game {
       "Pipe gap centers must stay within the safe placement range.",
     );
 
-    const pair: PipePair = { x: 0, gapCenter: minimum, passed: false };
+    const pair: PipePair = { x: 0, gapCenter: minimum, gap, passed: false };
     console.assert(awardPipeScore(pair), "A pipe pair should award its first pass.");
     console.assert(!awardPipeScore(pair), "A pipe pair should not award a second pass.");
+  }
+}
+
+function insideSquare(x: number, y: number, centerX: number, centerY: number, size: number): boolean {
+  const halfSize = size / 2;
+  return Math.abs(x - centerX) <= halfSize && Math.abs(y - centerY) <= halfSize;
+}
+
+function vibrate(duration: number): void {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(duration);
+    }
+  } catch {
+    // Haptics are optional and must not affect the run.
   }
 }
 

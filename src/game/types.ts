@@ -1,6 +1,23 @@
 import type { AssetName, AssetPack } from "./assets";
 
-export type GameState = "LOADING" | "READY" | "PLAYING" | "PAUSED" | "GAME_OVER";
+export type GameState =
+  | "LOADING"
+  | "READY"
+  | "PLAYING"
+  | "PAUSED"
+  | "RESUME_COUNTDOWN"
+  | "GAME_OVER";
+
+export type RunRank = "Unranked" | "Bronze" | "Silver" | "Gold" | "Platinum";
+
+export type PlayerProfile = {
+  schemaVersion: 2;
+  bestScore: number;
+  totalRuns: number;
+  totalPipesPassed: number;
+  totalPlayTimeSeconds: number;
+  muted: boolean;
+};
 
 export type Bird = {
   y: number;
@@ -12,6 +29,7 @@ export type Bird = {
 export type PipePair = {
   x: number;
   gapCenter: number;
+  gap: number;
   passed: boolean;
 };
 
@@ -34,7 +52,7 @@ export type VisualEffect = {
   active: boolean;
 };
 
-export type PressedButton = "pause" | "play" | "restart" | null;
+export type PressedButton = "pause" | "play" | "restart" | "mute" | "stats" | "closeStats" | null;
 
 export type RenderFrame = {
   state: GameState;
@@ -48,5 +66,12 @@ export type RenderFrame = {
   effects: VisualEffect[];
   score: number;
   bestScore: number;
+  profile: PlayerProfile;
+  rank: RunRank;
+  newBest: boolean;
+  muted: boolean;
+  statsOpen: boolean;
+  countdownLabel: string | null;
+  milestoneMessage: string | null;
   pressedButton: PressedButton;
 };

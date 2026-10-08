@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Clockwork Flight visual fixtures</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { width: 100vw; height: 100dvh; margin: 0; overflow: hidden; background: #171512; color: #f0dfc0; font: 16px Georgia, serif; }
+      .controls { position: fixed; z-index: 1; top: 8px; left: 8px; }
+      select, button { max-width: min(calc(100vw - 16px), 360px); padding: 8px; }
+      canvas { position: absolute; top: 50%; left: 50%; display: block; width: min(100vw, 56.25dvh); height: auto; aspect-ratio: 9 / 16; transform: translate(-50%, -50%); }
+    </style>
+  </head>
+  <body>
+    <div class="controls" id="controls">
+      <label for="fixture">Visual fixture</label>
+      <select id="fixture"></select>
+      <button id="hide-controls" type="button">Hide selector</button>
+    </div>
+    <canvas id="preview" width="540" height="960" aria-label="Selected Clockwork Flight visual fixture"></canvas>
+    <script type="module" src="./visual.ts"></script>
+  </body>
+</html>

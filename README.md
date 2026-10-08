@@ -15,7 +15,8 @@ Tap, click, or press a key to flap and stay aloft. Avoid the steampunk pipe obst
 **Desktop**
 
 - Space, W, Arrow Up, or mouse click to flap
-- P, Escape, or the pause button to pause or resume
+- P, Escape, or the pause button to pause; resume uses a short countdown
+- S to open player stats and M to toggle sound
 - After a crash, tap/click, press a flap key, or use the restart button
 
 **Mobile**
@@ -30,11 +31,17 @@ Tap, click, or press a key to flap and stay aloft. Avoid the steampunk pipe obst
 - Animated mechanical bird
 - Modular, procedurally placed pipe obstacles
 - Score and persistent local best score
+- Bounded score-based difficulty, run ranks, and new-best feedback
+- Local run totals with migration from the v1 best-score key
+- Procedural sound effects and optional mobile vibration
 - Ready, playing, paused, and game-over states
 - Multi-layer parallax steampunk environment with airships
 - Steam and spark effects
 - Pause and restart controls
 - Responsive HTML5 Canvas rendering
+
+Run the deterministic rules and storage tests with `npm test`. For static Canvas
+fixtures using the shipped artwork, run `npm run dev` and open `/tests/visual.html`.
 
 ## Tech Stack
 

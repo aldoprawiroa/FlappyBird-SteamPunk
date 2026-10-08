@@ -23,13 +23,22 @@ export const BIRD = {
 
 const pipeScale = 120 / 320;
 
+export const DIFFICULTY_TIERS = [
+  { index: 0, minimumScore: 0, speed: 180, gap: 240 },
+  { index: 1, minimumScore: 5, speed: 192, gap: 234 },
+  { index: 2, minimumScore: 10, speed: 204, gap: 228 },
+  { index: 3, minimumScore: 15, speed: 216, gap: 222 },
+  { index: 4, minimumScore: 20, speed: 228, gap: 216 },
+  { index: 5, minimumScore: 30, speed: 240, gap: 210 },
+] as const;
+
 export const PIPE = {
-  speed: 180,
+  baseSpeed: DIFFICULTY_TIERS[0].speed,
   spacing: 320,
-  gap: 240,
   safeCenterMargin: 120,
   initialGapShift: 25,
   maxGapShift: 170,
+  gapCenterClearance: 8,
   capWidth: 120,
   capHeight: 192 * pipeScale,
   bodyWidth: 256 * pipeScale,
@@ -67,8 +76,12 @@ export const EFFECTS = {
 export const UI = {
   pause: { x: 486, y: 68, visualSize: 62, targetSize: 86 },
   resume: { x: VIEWPORT.width / 2, y: 520, visualSize: 96, targetSize: 132 },
-  restart: { x: VIEWPORT.width / 2, y: 710, visualSize: 100, targetSize: 132 },
+  restart: { x: VIEWPORT.width / 2, y: 720, visualSize: 100, targetSize: 132 },
+  mute: { x: 54, y: 68, readyY: 278, statsY: 780, visualWidth: 116, visualHeight: 48, targetSize: 116 },
+  stats: { x: VIEWPORT.width / 2, y: 822, visualWidth: 140, visualHeight: 50, targetSize: 156 },
+  closeStats: { x: 464, y: 274, visualSize: 38, targetSize: 64 },
 } as const;
 
 export const DEBUG_HITBOXES = false;
-export const BEST_SCORE_KEY = "clockwork-flight-best-score";
+export const LEGACY_BEST_SCORE_KEY = "clockwork-flight-best-score";
+export const PROFILE_KEY = "clockwork-flight-profile-v2";
