@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#171512" />
+    <meta name="description" content="Clockwork Flight, a steampunk tap-to-fly arcade game." />
+    <title>Clockwork Flight</title>
+  </head>
+  <body>
+    <main class="game-stage">
+      <canvas
+        id="game"
+        width="540"
+        height="960"
+        tabindex="0"
+        aria-label="Clockwork Flight. Tap, click, Space, Arrow Up, or W to fly. Press P or Escape to pause."
+        aria-keyshortcuts="Space ArrowUp W P Escape"
+      ></canvas>
+      <p id="game-status" class="visually-hidden" aria-live="polite">Loading Clockwork Flight artwork.</p>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

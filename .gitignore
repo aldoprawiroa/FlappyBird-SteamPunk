@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vite/
+*.log
+*.tmp
+*.temp
+.env*
+!.env.example
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
