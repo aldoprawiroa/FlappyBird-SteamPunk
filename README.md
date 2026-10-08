@@ -4,7 +4,7 @@ Clockwork Flight is an original steampunk-themed side-scrolling arcade game buil
 
 ## Play
 
-GitHub Pages is prepared for this project, but the first deployment is still pending. Once Pages is enabled and the workflow completes, play at [aldoprawiroa.github.io/FlappyBird-SteamPunk](https://aldoprawiroa.github.io/FlappyBird-SteamPunk/).
+**[Play Clockwork Flight](https://aldoprawiroa.github.io/FlappyBird-SteamPunk/)**
 
 ## Gameplay
 
